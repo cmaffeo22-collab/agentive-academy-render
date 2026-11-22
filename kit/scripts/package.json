@@ -1,0 +1,10 @@
+{
+  "name": "agentive-sketch-explainer-render",
+  "private": true,
+  "description": "Node packages for render.cjs (installed by setup.sh)",
+  "dependencies": {
+    "roughjs": "4.6.6",
+    "opentype.js": "2.0.0",
+    "@resvg/resvg-js": "2.6.2"
+  }
+}

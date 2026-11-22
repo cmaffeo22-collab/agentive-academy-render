@@ -1,0 +1,63 @@
+name: render
+# Manual only. Renders lesson chunks in parallel; each finished lesson is uploaded, encrypted, to its chunk's release (renders-<chunk>).
+on:
+  workflow_dispatch:
+    inputs:
+      chunks:
+        description: Total number of chunks the lesson list is split into
+        default: "80"
+      first:
+        description: First chunk index to run
+        default: "0"
+      last:
+        description: Last chunk index to run
+        default: "79"
+permissions:
+  contents: write
+concurrency:
+  group: render-${{ inputs.first }}-${{ inputs.last }}
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: m
+        env:
+          FIRST: ${{ inputs.first }}
+          LAST: ${{ inputs.last }}
+        run: echo "matrix=$(python3 -c 'import json,os;print(json.dumps(list(range(int(os.environ["FIRST"]),int(os.environ["LAST"])+1))))')" >> "$GITHUB_OUTPUT"
+  render:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix:
+        chunk: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null && ffmpeg -version | head -1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.agentive-sketch-explainer
+          key: kit-${{ runner.os }}-${{ hashFiles('kit/scripts/requirements.txt', 'kit/scripts/package.json') }}
+      - name: Kit setup
+        run: bash kit/scripts/setup.sh > /dev/null && echo "kit ready"
+      - name: Render chunk ${{ matrix.chunk }}
+        env:
+          LESSON_KEY: ${{ secrets.LESSON_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          CHUNK: ${{ matrix.chunk }}
+          CHUNKS: ${{ inputs.chunks }}
+        run: bash ci/render_chunk.sh "$CHUNK" "$CHUNKS"
